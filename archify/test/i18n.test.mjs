@@ -56,7 +56,9 @@ function authoredExample(type, locale) {
     authoredIndex += 1;
     const value = locale === 'zh-CN'
       ? `文案${String(authoredIndex).padStart(2, '0')}`
-      : `Copy${String(authoredIndex).padStart(2, '0')}`;
+      : locale === 'he'
+        ? `טקסט${String(authoredIndex).padStart(2, '0')}`
+        : `Copy${String(authoredIndex).padStart(2, '0')}`;
     authored.push(value);
     return value;
   };
@@ -134,7 +136,7 @@ async function loadArtifact(browser, artifactPath) {
 }
 
 test('zh-CN localizes renderer-owned output across all five modes without translating authored content', () => {
-  assert.deepEqual(SUPPORTED_LOCALES, ['en', 'zh-CN']);
+  assert.deepEqual(SUPPORTED_LOCALES, ['en', 'zh-CN', 'he']);
   for (const type of Object.keys(EXAMPLES)) {
     const document = example(type);
     const authoredTitle = document.meta.title;
@@ -152,6 +154,28 @@ test('zh-CN localizes renderer-owned output across all five modes without transl
     assert.match(result.html, new RegExp(`<desc id="archify-diagram-description">\u7531 Archify \u751f\u6210\u7684`));
     assert.match(result.html, /"locale":"zh-CN"/);
     assert.match(result.html, />\u5bfc\u51fa\u56fe\u8868</);
+    assert.doesNotMatch(result.html, /\{\{i18n:/);
+  }
+});
+
+test('he localizes renderer-owned output across all five modes with right-to-left chrome', () => {
+  for (const type of Object.keys(EXAMPLES)) {
+    const document = example(type);
+    const authoredTitle = document.meta.title;
+    document.meta.locale = 'he';
+    delete document.meta.subtitle;
+
+    const result = run(type, document);
+    assert.equal(result.status, 0, `${type}: ${result.stderr || result.stdout}`);
+    assert.match(result.html, /^<!DOCTYPE html>\n<html lang="he" dir="rtl"/);
+    assert.match(result.html, /<svg\b[^>]*\blang="he"/);
+    assert.ok(result.html.includes(`<title>${authoredTitle}</title>`), `${type}: authored title changed`);
+    assert.ok(result.html.includes(`<h1>${authoredTitle}</h1>`), `${type}: authored heading changed`);
+    assert.match(result.html, /<text\b[^>]*>\u05de\u05e7\u05e8\u05d0<\/text>/);
+    assert.match(result.html, /aria-label="\u05d4\u05ea\u05de\u05e7\u05d3 /);
+    assert.match(result.html, /<desc id="archify-diagram-description">\u05d3\u05d9\u05d0\u05d2\u05e8\u05de\u05ea [\s\S]*?\u05e9\u05e0\u05d5\u05e6\u05e8\u05d4 \u05d1\u05d0\u05de\u05e6\u05e2\u05d5\u05ea Archify\./);
+    assert.match(result.html, /"locale":"he"/);
+    assert.match(result.html, /aria-label="\u05d9\u05d9\u05e6\u05d0 \u05d3\u05d9\u05d0\u05d2\u05e8\u05de\u05d4"/);
     assert.doesNotMatch(result.html, /\{\{i18n:/);
   }
 });
@@ -352,6 +376,114 @@ test('real Chrome keeps zh-CN Finder, Route, Export, and accessibility UI locali
   }
 });
 
+test('real Chrome keeps he Finder, Route, Export, and accessibility UI localized and right-to-left in all five modes', {
+  skip: chromePath ? false : 'Set ARCHIFY_CHROME to run the real browser localization regression.',
+}, async () => {
+  const browser = new ChromeVisualBrowser(chromePath);
+  try {
+    for (const type of Object.keys(EXAMPLES)) {
+      const document = example(type);
+      document.meta.locale = 'he';
+      document.meta.title = `\u05d1\u05d3\u05d9\u05e7\u05ea \u05db\u05e8\u05d5\u05dd-${type}`;
+      const result = run(type, document);
+      assert.equal(result.status, 0, `${type}: ${result.stderr || result.stdout}`);
+
+      const sessionId = await loadArtifact(browser, result.output);
+      const state = await evaluate(browser, sessionId, `(function () {
+        var finderButton = document.getElementById('btn-node-finder');
+        var routeButton = document.getElementById('btn-route-probe');
+        var exportButton = document.getElementById('btn-export');
+        finderButton.click();
+        var finder = {
+          hidden: document.getElementById('node-finder').hidden,
+          title: document.getElementById('node-finder-title').textContent.trim(),
+          searchLabel: document.getElementById('node-finder-input').getAttribute('aria-label'),
+          dir: getComputedStyle(document.getElementById('node-finder')).direction
+        };
+        document.getElementById('node-finder-close').click();
+        routeButton.click();
+        var route = {
+          hidden: document.getElementById('route-probe').hidden,
+          title: document.getElementById('route-probe-title').textContent.trim(),
+          label: routeButton.getAttribute('aria-label')
+        };
+        routeButton.click();
+        exportButton.click();
+        var exportMenu = document.getElementById('export-menu');
+        return {
+          htmlLang: document.documentElement.lang,
+          dir: document.documentElement.getAttribute('dir') || '',
+          bodyDir: getComputedStyle(document.body).direction,
+          svgLang: document.querySelector('.diagram-container svg').getAttribute('lang'),
+          toolbarLabel: document.querySelector('.diagram-nav').getAttribute('aria-label'),
+          finder: finder,
+          route: route,
+          exportMenuOpen: exportMenu.classList.contains('open'),
+          exportLabel: exportButton.getAttribute('aria-label'),
+          exportMenuLabel: exportMenu.getAttribute('aria-label'),
+          exportMenuText: exportMenu.textContent
+        };
+      })()`);
+
+      assert.equal(state.htmlLang, 'he', type);
+      assert.equal(state.dir, 'rtl', type);
+      assert.equal(state.bodyDir, 'rtl', type);
+      assert.equal(state.svgLang, 'he', type);
+      assert.equal(state.toolbarLabel, '\u05d1\u05e7\u05e8\u05d5\u05ea \u05ea\u05e6\u05d5\u05d2\u05ea \u05d3\u05d9\u05d0\u05d2\u05e8\u05de\u05d4', type);
+      assert.deepEqual(state.finder, {
+        hidden: false,
+        title: '\u05de\u05e6\u05d0 \u05e6\u05d5\u05de\u05ea',
+        searchLabel: '\u05d7\u05e4\u05e9 \u05e6\u05de\u05ea\u05d9 \u05d3\u05d9\u05d0\u05d2\u05e8\u05de\u05d4',
+        dir: 'rtl',
+      }, type);
+      assert.deepEqual(state.route, {
+        hidden: false,
+        title: '\u05d1\u05d7\u05e8 \u05e6\u05d5\u05de\u05ea \u05e4\u05ea\u05d9\u05d7\u05d4',
+        label: '\u05e0\u05e7\u05d4 \u05d0\u05ea \u05d4\u05de\u05e1\u05dc\u05d5\u05dc \u05e9\u05e0\u05e2\u05e7\u05d1',
+      }, type);
+      assert.equal(state.exportMenuOpen, true, type);
+      assert.equal(state.exportLabel, '\u05d9\u05d9\u05e6\u05d0 \u05d3\u05d9\u05d0\u05d2\u05e8\u05de\u05d4', type);
+      assert.equal(state.exportMenuLabel, '\u05d9\u05d9\u05e6\u05d5\u05d0', type);
+      assert.match(state.exportMenuText, /\u05e9\u05d9\u05ea\u05d5\u05e3/, type);
+
+      const shareCardFailure = await evaluate(browser, sessionId, `(async function () {
+        var originalGetContext = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function () { return null; };
+        try {
+          await Archify.exportMenu.shareCard();
+          return { rejected: false, message: '' };
+        } catch (error) {
+          return { rejected: true, message: String(error && error.message || error) };
+        } finally {
+          HTMLCanvasElement.prototype.getContext = originalGetContext;
+        }
+      })()`, true);
+      assert.deepEqual(shareCardFailure, {
+        rejected: true,
+        message: '\u05d4\u05e7\u05e9\u05e8 \u05e7\u05e0\u05d1\u05e1 \u05d3\u05d5\u05be\u05de\u05de\u05d3\u05d9 \u05d0\u05d9\u05e0\u05d5 \u05d6\u05de\u05d9\u05df \u05e2\u05d1\u05d5\u05e8 \u05db\u05e8\u05d8\u05d9\u05e1 \u05e9\u05d9\u05ea\u05d5\u05e3',
+      }, type);
+
+      const visual = spawnSync(process.execPath, [cli, 'visual-check', result.output, '--json'], {
+        cwd: skillRoot,
+        encoding: 'utf8',
+        env: { ...process.env, ARCHIFY_CHROME: chromePath },
+      });
+      assert.ok([0, 1].includes(visual.status), `${type}: ${visual.stderr || visual.stdout}`);
+      const receipt = JSON.parse(visual.stdout);
+      assert.equal(receipt.readability.status, 'pass', type);
+      assert.equal(receipt.viewerChrome.status, 'pass', type);
+      assert.equal(receipt.captures.status, 'pass', type);
+      assert.equal(
+        receipt.containment.viewports.every((viewport) => viewport.overflowX === false),
+        true,
+        `${type}: localized Viewer introduced horizontal overflow`,
+      );
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
 test('every Viewer message reference resolves through the shared catalog', () => {
   const template = fs.readFileSync(templatePath, 'utf8');
   const keys = new Set(catalogKeys());
@@ -397,6 +529,16 @@ test('runtime labels stay localized after composition', () => {
     '2 nodes · 1 directed hop · shortest authored route',
   );
 
+  assert.equal(translateMessage('he', 'viewer.kind.backend'), '\u05e6\u05d3 \u05e9\u05e8\u05ea');
+  assert.equal(translateMessage('he', 'viewer.kind.decision'), '\u05d4\u05d7\u05dc\u05d8\u05d4');
+  assert.equal(translateMessage('he', 'viewer.passport.relationship.connectsFrom'), '\u05de\u05ea\u05d7\u05d1\u05e8 \u05de-');
+  assert.equal(translateMessage('he', 'viewer.nav.level.auto'), '\u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9');
+
+  const heHops = translateCount('he', 'viewer.route.hop', 2);
+  assert.equal(
+    translateMessage('he', 'viewer.finder.result.routeTarget', { label: '\u05d9\u05dd', links: heHops }),
+    '\u05d1\u05d7\u05e8 \u05d9\u05dd \u05db\u05d9\u05e2\u05d3 \u05d4\u05de\u05e1\u05dc\u05d5\u05dc, 2 \u05e7\u05e4\u05d9\u05e6\u05d5\u05ea',
+  );
 });
 
 test('Share Card and export failures use catalog messages instead of fixed English', () => {

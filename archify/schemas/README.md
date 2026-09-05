@@ -21,9 +21,10 @@ level, so unknown fields are rejected rather than silently ignored.
 
 Every `meta` object also accepts `animation: "trace"` for opt-in SVG/CSS motion
 in generated HTML. Omit it, or set `"none"`, for the default static output.
-It also accepts `locale: "en" | "zh-CN"`. The field selects the fixed Viewer
-UI, renderer-owned default legend and accessibility copy, document-title
-suffix, and `<html lang>` value; it does not translate authored strings.
+It also accepts `locale: "en" | "zh-CN" | "he"`. The field selects the fixed
+Viewer UI, renderer-owned default legend and accessibility copy, document-title
+suffix, and `<html lang>` value; `"he"` additionally mirrors the fixed Viewer
+UI and chrome right-to-left. The locale does not translate authored strings.
 Omitting it preserves legacy behavior and resolves to English. Unsupported
 locale values fail schema validation instead of being guessed or silently
 rewritten.
