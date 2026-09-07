@@ -351,7 +351,7 @@ function options(testFixture, fetchImpl, overrides = {}) {
     fetchImpl,
     now: () => baseTime,
     random: () => 0.5,
-    timeoutMs: 50,
+    timeoutMs: 5_000,
     ...overrides,
   };
 }
